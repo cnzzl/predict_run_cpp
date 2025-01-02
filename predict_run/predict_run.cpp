@@ -12,53 +12,58 @@
 using namespace std;
 
 /// <summary>
-/// ´ò¿ªÉãÏñÍ·»òÕßÍ¼Æ¬
+/// æ‰“å¼€æ‘„åƒå¤´æˆ–è€…å›¾ç‰‡
 /// </summary>
 void OpenImg(string imgpath, string enginemode ,string enginpath ,int batchSize, int inputC, int inputH, int inputW, int outputC, int outputH, int outputW)
 {
-    string baseImgPath = "d:/source/img/";
-    string baseEnginePath = "d:/source/nnnet/";
+    
     shared_ptr<Engine>engine = make_shared<Engine>(enginemode, enginpath, batchSize, inputC, inputH, inputW, outputC, outputH, outputW);
     if (imgpath == "camera")
     {
-        // ´´½¨Ò»¸öVideoCapture¶ÔÏó
-        cv::VideoCapture cap(0); // 0´ú±í´ò¿ªÄ¬ÈÏÉãÏñÍ·
+        // åˆ›å»ºä¸€ä¸ªVideoCaptureå¯¹è±¡
+        cv::VideoCapture cap(0); // 0ä»£è¡¨æ‰“å¼€é»˜è®¤æ‘„åƒå¤´
 
-        // ¼ì²éÉãÏñÍ·ÊÇ·ñ³É¹¦´ò¿ª
+        // æ£€æŸ¥æ‘„åƒå¤´æ˜¯å¦æˆåŠŸæ‰“å¼€
         if (!cap.isOpened()) 
             std::cerr << "Error: Could not open camera" << std::endl;
         cv::Mat frame;
         while (true) {
-            // ¶ÁÈ¡µ±Ç°Ö¡
+            float start = cv::getTickCount();
+            // è¯»å–å½“å‰å¸§
             cap >> frame;
-            // ¼ì²éÖ¡ÊÇ·ñÎª¿Õ
+            // æ£€æŸ¥å¸§æ˜¯å¦ä¸ºç©º
             if (frame.empty()) {
                 std::cerr << "Error: Could not grab a frame" << std::endl;
                 break;
             }
-            //cv::Mat frame2 = engine->Predict(frame);
-            // ÏÔÊ¾µ±Ç°Ö¡
-            //cv::imshow("camera", frame2);
-            // °´ÏÂESC¼üÍË³ö
+            cv::Mat frame2 = engine->YOLO8ClsPredict(frame);
+            //cv::Mat frame2 = engine->YOLO8PosePredict(frame);
+            
+            // è®¡ç®—FPS render it
+            float t = (cv::getTickCount() - start) / static_cast<float>(cv::getTickFrequency());
+            float EEE = 1.0 / t;
+            putText(frame2, cv::format("FPS: %.2f", 1.0 / t), cv::Point(20, 40), cv::FONT_HERSHEY_PLAIN, 2.0, cv::Scalar(255, 0, 0), 2, 8);
+             //æ˜¾ç¤ºå½“å‰å¸§
+            cv::imshow("camera", frame2);
+            // æŒ‰ä¸‹ESCé”®é€€å‡º
             if (cv::waitKey(10) == 27) 
                 break;
         }
-        // ÊÍ·ÅÉãÏñÍ·
+        // é‡Šæ”¾æ‘„åƒå¤´
         cap.release();
         cv::destroyAllWindows();
     }
     else
     {
-        imgpath += baseImgPath;
         cv::Mat frame = cv::imread(imgpath);
-        // »ñÈ¡¿ªÊ¼Ê±¼äµã
+        // è·å–å¼€å§‹æ—¶é—´ç‚¹
         auto start = std::chrono::high_resolution_clock::now();
         cv::Mat frame2 = engine->AnomalibPredict(frame);
-        // »ñÈ¡½áÊøÊ±¼äµã
+        // è·å–ç»“æŸæ—¶é—´ç‚¹
         auto end = std::chrono::high_resolution_clock::now();
         auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
-        std::cout << "ÍÆÀíÊ±¼ä: " << std::fixed << std::setprecision(3)
-            << double(duration.count()) << " ºÁÃë" << std::endl;
+        std::cout << "predict time: " << std::fixed << std::setprecision(3)
+            << double(duration.count()) << " ms" << std::endl;
         
         cv::imwrite("output.jpg", frame2);
     }
@@ -68,17 +73,60 @@ int main(int argc, char** argv)
  
 
     //anomalib
-    //OpenImg("0001.jpg", "trt", "anomalib4080.engine", 1, 3, 256, 256, 1, 224, 224);
-    OpenImg("0001.jpg", "onnx", "model.onnx", 1, 3, 256, 256, 1, 224, 224);
+    //OpenImg("0004.jpg", "trt", "D:/source/nnnet/anomalib4080.engine", 1, 3, 256, 256, 1, 224, 224);
+    //OpenImg("0001.jpg", "onnx", "model.onnx", 1, 3, 256, 256, 1, 224, 224);
 
     //yoloclass
-    //OpenImg("camera", "trt", "yolov8ni8.engine", 1, 3, 640, 640, 1, 84, 8400);
-     //OpenImg("camera", "trt", "yolov8n1060.engine", 1, 3, 640, 640, 1, 84, 8400);
-    //OpenImg("camera", "onnx", "yolov8n.onnx", 1, 3, 640, 640, 1, 84, 8400);
+    //OpenImg("camera", "trt", "D:/source/nnnet/yolov8ni8.engine", 1, 3, 640, 640, 1, 84, 8400);
+    //OpenImg("camera", "trt", "D:/source/nnnet/yolov8n1060.engine", 1, 3, 640, 640, 1, 84, 8400);
+    //OpenImg("camera", "onnx", "D:/source/nnnet/yolov8n.onnx", 1, 3, 640, 640, 1, 84, 8400);
 
     //yoloseg
     //OpenImg("two_runners1.jpg", "onnx", "yolov8n-seg.onnx", 1, 3, 640, 640, 1, 84, 8400);
 
+    //yolopose
+    OpenImg("camera", "onnx", "D:/source/nnnet/yolov8n-pose.onnx", 1, 3, 640, 640, 1, 56, 8400);
 
     return 0;
 }
+//#include <iostream>
+//#include <filesystem>
+//#include <string>
+//#include <iomanip>
+//namespace fs = std::filesystem;
+//int main() {
+//    // æŒ‡å®šè¦éå†çš„æ–‡ä»¶å¤¹è·¯å¾„
+//    fs::path directory = "your_directory_path";
+//
+//    // æ£€æŸ¥è·¯å¾„æ˜¯å¦å­˜åœ¨ä¸”æ˜¯ä¸€ä¸ªç›®å½•
+//    if (!fs::exists(directory) || !fs::is_directory(directory)) {
+//        std::cerr << "The specified path is not a valid directory." << std::endl;
+//        return 1;
+//    }
+//
+//    int counter = 1;
+//    std::string extension;
+//
+//    // éå†ç›®å½•ä¸­çš„æ¯ä¸ªæ–‡ä»¶
+//    for (const auto& entry : fs::directory_iterator(directory)) {
+//        // æ£€æŸ¥æ–‡ä»¶æ˜¯å¦æ˜¯å›¾ç‰‡ï¼ˆæ ¹æ®æ‰©å±•åï¼‰
+//        extension = entry.path().extension().string();
+//        if (extension == ".jpg" || extension == ".jpeg" || extension == ".png" || extension == ".bmp" || extension == ".gif") {
+//            // æ„é€ æ–°çš„æ–‡ä»¶å
+//            std::string new_filename = "0000" + std::to_string(counter);
+//            new_filename = new_filename.substr(new_filename.size() - 4) + extension;
+//
+//            // æ„é€ æ–°çš„æ–‡ä»¶è·¯å¾„
+//            fs::path new_path = entry.path().parent_path() / new_filename;
+//
+//            // é‡å‘½åæ–‡ä»¶
+//            fs::rename(entry.path(), new_path);
+//
+//            // å¢åŠ è®¡æ•°å™¨
+//            counter++;
+//        }
+//    }
+//
+//    std::cout << "Files have been renamed successfully." << std::endl;
+//    return 0;
+//}

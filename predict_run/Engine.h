@@ -20,7 +20,7 @@ class Logger : public nvinfer1::ILogger
 public:
     void log(Severity severity, const char* msg) noexcept override
     {
-        // ¸ù¾İĞèÒª×Ô¶¨ÒåÈÕÖ¾Êä³öÂß¼­
+        // æ ¹æ®éœ€è¦è‡ªå®šä¹‰æ—¥å¿—è¾“å‡ºé€»è¾‘
         switch (severity)
         {
         case Severity::kINTERNAL_ERROR:
@@ -61,8 +61,6 @@ public:
 
     int top;
     int left;
-    float start;
-
 
     string name;
     string enginpath;
@@ -75,15 +73,42 @@ public:
     IExecutionContext* context;
     void* buffers[3];
     /*shared_ptr<Ort::Session>session_;*/
-
-   /* cv::Mat Predict(cv::Mat frame)
+    
+    /// <summary>
+    /// æ‰“å°MAT
+    /// </summary>
+    /// <param name="img_res"></param>
+    void CheckMat(cv::Mat img_res ,int row,int cal)
+    {
+        for (int i = 0; i < row; ++i) {
+            for (int j = 0; j < cal; ++j) {
+                // æ ¹æ®Matçš„æ•°æ®ç±»å‹é€‰æ‹©åˆé€‚çš„æŒ‡é’ˆç±»å‹
+                if (img_res.type() == CV_8U) {
+                    cout << "mat(" << i << ", " << j << ") = " << static_cast<int>(img_res.at<uchar>(i, j)) << endl;
+                }
+                else if (img_res.type() == CV_32F) {
+                    cout << "mat(" << i << ", " << j << ") = " << img_res.at<float>(i, j) << endl;
+                }
+                else if (img_res.type() == CV_64F) {
+                    cout << "mat(" << i << ", " << j << ") = " << img_res.at<double>(i, j) << endl;
+                }
+                // æ ¹æ®éœ€è¦æ·»åŠ æ›´å¤šç±»å‹
+            }
+        }
+    }
+    cv::Mat YOLO8ClsPredict(cv::Mat frame)
     {
         if (name == "trt")
-            return TrtPredict(frame);
+        {
+            YOLO8ClsAfter(TrtPredict(frame, 1));
+            return img_result;
+        }
         else if (name == "onnx")
-            return OnnxPredict(frame);
-
-    }*/
+        {
+            YOLO8ClsAfter(OnnxPredict(frame, 1));
+            return img_result;
+        }
+    }
     cv::Mat AnomalibPredict(cv::Mat frame)
     {
         if (name == "trt")
@@ -97,21 +122,34 @@ public:
             AnomalibAfter(OnnxPredict(frame, 0));
             return img_result;
         }
-
+    }
+    cv::Mat YOLO8PosePredict(cv::Mat frame)
+    {
+        if (name == "trt")
+        {
+            YOLO8poseAfter(TrtPredict(frame, 1));
+            return img_result;
+        }
+        else if (name == "onnx")
+        {
+            YOLO8poseAfter(OnnxPredict(frame, 1));
+            return img_result;
+        }
     }
     struct TensorInfo {
         vector<int64_t> shape;
         vector<float> data;
     };
+  
     /// <summary>
-    /// onnxÍÆÀí
+    /// onnxæ¨ç†
     /// </summary>
     /// <param name="frame"></param>
     /// <returns></returns>
     cv::Mat OnnxPredict(cv::Mat frame,bool letterBoxImage)
     {
         
-        // ´´½¨InferSession, ²éÑ¯Ö§³ÖÓ²¼şÉè±¸
+        // åˆ›å»ºInferSession, æŸ¥è¯¢æ”¯æŒç¡¬ä»¶è®¾å¤‡
         // GPU Mode, 0 - gpu device id
         std::wstring modelPath = std::wstring(enginpath.begin(), enginpath.end());
         Ort::SessionOptions session_options;
@@ -130,7 +168,7 @@ public:
         Ort::AllocatorWithDefaultOptions allocator;
         input_node_names.reserve(numInputNodes);
 
-        // ´Óonnx»ñÈ¡input size 1*3*640*640
+        // ä»onnxè·å–input size 1*3*640*640
         int input_w = 0;
         int input_h = 0;
         for (int i = 0; i < numInputNodes; i++) {
@@ -143,7 +181,7 @@ public:
             input_h = input_dims[2];
             //std::cout << "input format: NxCxHxW = " << input_dims[0] << "x" << input_dims[1] << "x" << input_dims[2] << "x" << input_dims[3] << std::endl;
         }
-        // ´Óonnx»ñÈ¡outputsize 84*8400
+        // ä»onnxè·å–outputsize 84*8400
         int output_h = 0;
         int output_w = 0;
         Ort::TypeInfo output_type_info = session_.GetOutputTypeInfo(0);
@@ -152,13 +190,13 @@ public:
         output_h = output_dims[1]; // 84
         output_w = output_dims[2]; // 8400
         //std::cout << "output format : HxW = " << output_dims[1] << "x" << output_dims[2] << std::endl;
-        //´Óonnx»ñÈ¡out and in name
+        //ä»onnxè·å–out and in name
         for (int i = 0; i < numOutputNodes; i++) {
             auto out_name = session_.GetOutputNameAllocated(i, allocator);
             output_node_names.push_back(out_name.get());
         }
         //std::cout << "input: " << input_node_names[0] << " output: " << output_node_names[0] << std::endl;
-        //Í¼ĞÎÔ¤´¦Àí
+        //å›¾å½¢é¢„å¤„ç†
         // format frame
         ResizeImage(frame, letterBoxImage);
 
@@ -176,7 +214,7 @@ public:
         const std::array<const char*, 1> inputNames = { input_node_names[0].c_str() };
         const std::array<const char*, 1> outNames = { output_node_names[0].c_str() };
         std::vector<Ort::Value> ort_outputs;
-        //Ô¤²â
+        //é¢„æµ‹
         try {
             ort_outputs = session_.Run(Ort::RunOptions{ nullptr }, inputNames.data(), &input_tensor_, 1, outNames.data(), outNames.size());
 
@@ -186,7 +224,7 @@ public:
         }
 
 #pragma region anomalib
-        //// »ñÈ¡Êä³öTensor
+        //// è·å–è¾“å‡ºTensor
         //TensorInfo output_info;
         //output_info.shape = ort_outputs[0].GetTensorTypeAndShapeInfo().GetShape();
         //output_info.data.resize(output_info.shape[0] * output_info.shape[1] * output_info.shape[2] * output_info.shape[3]);
@@ -202,27 +240,13 @@ public:
 
         float* pdata = ort_outputs[0].GetTensorMutableData<float>();
         cv::Mat img_float(outputH, outputW, CV_32F, pdata);
-        //for (int i = 0; i < 224; ++i) {
-        //    for (int j = 0; j < 224; ++j) {
-        //        // ¸ù¾İMatµÄÊı¾İÀàĞÍÑ¡ÔñºÏÊÊµÄÖ¸ÕëÀàĞÍ
-        //        if (img_float.type() == CV_8U) {
-        //            cout << "mat(" << i << ", " << j << ") = " << static_cast<int>(img_float.at<uchar>(i, j)) << endl;
-        //        }
-        //        else if (img_float.type() == CV_32F) {
-        //            cout << "mat(" << i << ", " << j << ") = " << img_float.at<float>(i, j) << endl;
-        //        }
-        //        else if (img_float.type() == CV_64F) {
-        //            cout << "mat(" << i << ", " << j << ") = " << img_float.at<double>(i, j) << endl;
-        //        }
-        //        // ¸ù¾İĞèÒªÌí¼Ó¸ü¶àÀàĞÍ
-        //    }
-        //}
+       
         //delete[] pdata;
         session_options.release();
         session_.release();
         return img_float;
         //// output data
-        //// ´¦ÀíÊä³ö
+        //// å¤„ç†è¾“å‡º
         //float* pdata = ort_outputs[0].GetTensorMutableData<float>();
 
         ///*assert(ort_outputs.size() == 1 && ort_outputs.front().IsTensor());
@@ -232,79 +256,74 @@ public:
         ////delete[] pdata;
         ////delete[] ptrPM->inputData;
         ////delete[] outputData;
-
-        
         //return ptrPM->img_result;
     }
 
     /// <summary>
-    /// trtÍÆÀí
+    /// trtæ¨ç†
     /// </summary>
     /// <param name="frame"></param>
     /// <returns></returns>
     cv::Mat TrtPredict(cv::Mat frame, bool letterBoxImage)
     {
         ResizeImage(frame, letterBoxImage);
-        //// ´´½¨CUDAÁ÷
+        //// åˆ›å»ºCUDAæµ
         cudaStream_t stream;
-#pragma region trtÔËĞĞ
+
         cudaStreamCreate(&stream);
-        // ½«inputBlobµÄÊı¾İ¸´ÖÆµ½inputDataÖĞ
+        // å°†inputBlobçš„æ•°æ®å¤åˆ¶åˆ°inputDataä¸­
         cudaMemcpyAsync(buffers[0], inputData, batchSize * inputC * inputH * inputW * sizeof(float), cudaMemcpyHostToDevice, stream);
-        // ÉèÖÃ°ó¶¨
+        // è®¾ç½®ç»‘å®š
         void* bindings[3] = { buffers[0], buffers[1],buffers[2] };
-        // ÔËĞĞÍÆÀí
+        void* outputData = new float[batchSize * outputC * outputH * outputW];
+
+        // è¿è¡Œæ¨ç†
         context->executeV2(bindings);
-        // µÈ´ıÍÆÀíÍê³É£¨Èç¹ûĞèÒªÒì²½²Ù×÷£¬¿ÉÒÔ²»ÔÚÕâÀïÍ¬²½£©
+
+        //æ‰§è¡Œæ¨ç†
+        //context->enqueueV3(stream);
+
+        // ç­‰å¾…æ¨ç†å®Œæˆï¼ˆå¦‚æœéœ€è¦å¼‚æ­¥æ“ä½œï¼Œå¯ä»¥ä¸åœ¨è¿™é‡ŒåŒæ­¥ï¼‰
+        cudaStreamSynchronize(stream);
+        
+        cudaMemcpyAsync(outputData, buffers[1], batchSize * outputC * outputH * outputW * sizeof(float), cudaMemcpyDeviceToHost, stream);
+        //æ•°æ®åå¤„ç†
+        cv::Mat img_float(outputH, outputW, CV_32F, outputData);
+       
+        return img_float;
+        
+    }
+    /// <summary>
+    /// trtæ¨ç†pro
+    /// </summary>
+    /// <param name="frame"></param>
+    /// <returns></returns>
+    cv::Mat TrtPredictPRO(cv::Mat frame, bool letterBoxImage)
+    {
+        ResizeImage(frame, letterBoxImage);
+        //// åˆ›å»ºCUDAæµ
+        cudaStream_t stream;
+        cudaStreamCreate(&stream);
+     
+        // å°†inputBlobçš„æ•°æ®å¤åˆ¶åˆ°inputDataä¸­
+        cudaMemcpyAsync(buffers[0], inputData, batchSize * inputC * inputH * inputW * sizeof(float), cudaMemcpyHostToDevice, stream);
+        // è®¾ç½®ç»‘å®š
+        void* bindings[3] = { buffers[0], buffers[1],buffers[2] };
+        // è¿è¡Œæ¨ç†
+        context->executeV2(bindings);
+        
+        // ç­‰å¾…æ¨ç†å®Œæˆï¼ˆå¦‚æœéœ€è¦å¼‚æ­¥æ“ä½œï¼Œå¯ä»¥ä¸åœ¨è¿™é‡ŒåŒæ­¥ï¼‰
         cudaStreamSynchronize(stream);
 
-        
-
-        float* outputData = new float[batchSize * outputC * outputH * outputW];
+        void* outputData = new float[batchSize * outputC * outputH * outputW];
         cudaMemcpyAsync(outputData, buffers[1], batchSize * outputC * outputH * outputW * sizeof(float), cudaMemcpyDeviceToHost, stream);
-        //Êı¾İºó´¦Àí
+        //æ•°æ®åå¤„ç†
         cv::Mat img_float(outputH, outputW, CV_32F, outputData);
-        for (int i = 0; i < 224; ++i) {
-            for (int j = 0; j < 224; ++j) {
-                // ¸ù¾İMatµÄÊı¾İÀàĞÍÑ¡ÔñºÏÊÊµÄÖ¸ÕëÀàĞÍ
-                if (img_float.type() == CV_8U) {
-                    cout << "mat(" << i << ", " << j << ") = " << static_cast<int>(img_float.at<uchar>(i, j)) << endl;
-                }
-                else if (img_float.type() == CV_32F) {
-                    cout << "mat(" << i << ", " << j << ") = " << img_float.at<float>(i, j) << endl;
-                }
-                else if (img_float.type() == CV_64F) {
-                    cout << "mat(" << i << ", " << j << ") = " << img_float.at<double>(i, j) << endl;
-                }
-                // ¸ù¾İĞèÒªÌí¼Ó¸ü¶àÀàĞÍ
-            }
-        }
-#pragma endregion
-
-
-
-#pragma region yoloclass
-        //// ½«Êä³ö´ÓGPU¸´ÖÆµ½Ö÷»úÄÚ´æ
-        //float* outputData = new float[batchSize * outputC * outputH * outputW];
-        //cudaMemcpyAsync(outputData, buffers[1], batchSize * outputC * outputH * outputW * sizeof(float), cudaMemcpyDeviceToHost, stream);
-        //AfterProcessing(outputData);
-
-#pragma endregion
-
-
-
-         /* TensorInfo output_info;
-          output_info.data.resize(1 * 1 * 224 * 224);
-          cudaMemcpyAsync(output_info, buffers[1], batchSize * outputC * outputH * outputW * sizeof(float), cudaMemcpyDeviceToHost, stream);
-          Mat img_res2(output_info.shape[2], output_info.shape[3], CV_32F, output_info.data.data());*/
-          //delete[] ptrPM->inputData;
-        delete[] outputData;
+        // æ¸…ç†èµ„æº
+        cudaStreamDestroy(stream);
         return img_float;
 
     }
-
-	
-	
 	std::vector<std::string> labels;
 	std::vector<std::string> readClassNames()
 	{
@@ -325,13 +344,12 @@ public:
 		fp.close();
 		return classNames;
 	}
-    void AfterProcessing(float* outputData)
+    void YOLO8ClsAfter(cv::Mat data_float)
     {
         cv::Mat frame = this->img_oringin;
 
-
-        cv::Mat dout(outputH, outputW, CV_32F, (float*)outputData);
-        cv::Mat det_output = dout.t(); // 8400x84
+        //cv::Mat dout(outputH, outputW, CV_32F, (float*)outputData);
+        cv::Mat det_output = data_float.t(); // 8400x84
 
         // post-process
         std::vector<cv::Rect> boxes;
@@ -345,7 +363,7 @@ public:
             double score;
             minMaxLoc(classes_scores, 0, &score, 0, &classIdPoint);
 
-            // ÖÃĞÅ¶È 0¡«1Ö®¼ä
+            // ç½®ä¿¡åº¦ 0ï½1ä¹‹é—´
             if (score > 0.7)
             {
                 float cx = det_output.at<float>(i, 0);
@@ -384,67 +402,34 @@ public:
 
             }
         }
-        // ¼ÆËãFPS render it
-        float t = (cv::getTickCount() - start) / static_cast<float>(cv::getTickFrequency());
-        putText(frame, cv::format("FPS: %.2f", 1.0 / t), cv::Point(20, 40), cv::FONT_HERSHEY_PLAIN, 2.0, cv::Scalar(255, 0, 0), 2, 8);
+        
 
         this->img_result = frame;
     }
     void AnomalibAfter(cv::Mat data_float)
     {
-
-        //Êı¾İºó´¦Àí
+        //æ•°æ®åå¤„ç†
         cv::Mat frame = img_oringin;
-        // ×ª»»Êä³öTensorÎªMat
-
-        //for (int i = 0; i < 224; ++i) {
-        //    for (int j = 0; j < 224; ++j) {
-        //        // ¸ù¾İMatµÄÊı¾İÀàĞÍÑ¡ÔñºÏÊÊµÄÖ¸ÕëÀàĞÍ
-        //        if (data_float.type() == CV_8U) {
-        //            cout << "mat(" << i << ", " << j << ") = " << static_cast<int>(data_float.at<uchar>(i, j)) << endl;
-        //        }
-        //        else if (data_float.type() == CV_32F) {
-        //            cout << "mat(" << i << ", " << j << ") = " << data_float.at<float>(i, j) << endl;
-        //        }
-        //        else if (data_float.type() == CV_64F) {
-        //            cout << "mat(" << i << ", " << j << ") = " << data_float.at<double>(i, j) << endl;
-        //        }
-        //        // ¸ù¾İĞèÒªÌí¼Ó¸ü¶àÀàĞÍ
-        //    }
-        //}
-        // ´´½¨Ò»¸öÓÃÓÚ´æ´¢×ª»»ºóÊı¾İµÄ¾ØÕó
+        // è½¬æ¢è¾“å‡ºTensorä¸ºMat
+        
+        // åˆ›å»ºä¸€ä¸ªç”¨äºå­˜å‚¨è½¬æ¢åæ•°æ®çš„çŸ©é˜µ
         cv::Mat img_res;
 
-        // ½«¸¡µãÊı¾ØÕó×ª»»Îª8Î»ÎŞ·ûºÅÕûÊı¾ØÕó
+        // å°†æµ®ç‚¹æ•°çŸ©é˜µè½¬æ¢ä¸º8ä½æ— ç¬¦å·æ•´æ•°çŸ©é˜µ
         data_float.convertTo(img_res, CV_8U, 1.0, 0.0);
         
         //data_float.convertTo(img_res, CV_8U, 255.0);
-
-        //for (int i = 0; i < 224; ++i) {
-        //    for (int j = 0; j < 224; ++j) {
-        //        // ¸ù¾İMatµÄÊı¾İÀàĞÍÑ¡ÔñºÏÊÊµÄÖ¸ÕëÀàĞÍ
-        //        if (img_res.type() == CV_8U) {
-        //            cout << "mat(" << i << ", " << j << ") = " << static_cast<int>(img_res.at<uchar>(i, j)) << endl;
-        //        }
-        //        else if (img_res.type() == CV_32F) {
-        //            cout << "mat(" << i << ", " << j << ") = " << img_res.at<float>(i, j) << endl;
-        //        }
-        //        else if (img_res.type() == CV_64F) {
-        //            cout << "mat(" << i << ", " << j << ") = " << img_res.at<double>(i, j) << endl;
-        //        }
-        //        // ¸ù¾İĞèÒªÌí¼Ó¸ü¶àÀàĞÍ
-        //    }
-        //}
-
-        // ãĞÖµ´¦Àí
+        // é˜ˆå€¼å¤„ç†
         Mat thresh;
-        threshold(img_res, thresh, 45, 255, THRESH_BINARY);
+        threshold(img_res, thresh, 40, 255, THRESH_BINARY);
+        //cv::imwrite("thresh.jpg", thresh);
+       
 
-        // ²éÕÒÂÖÀª
+        // æŸ¥æ‰¾è½®å»“
         vector<vector<Point>> contours;
         findContours(thresh, contours, RETR_TREE, CHAIN_APPROX_SIMPLE);
 
-        // »æÖÆÂÖÀª
+        // ç»˜åˆ¶è½®å»“
         for (const auto& cnt : contours) {
             Rect bounding_rect = boundingRect(cnt);
             float ratio = (float)256 / 224;
@@ -454,13 +439,74 @@ public:
         }
         this->img_result = frame;
 
-        //// ±£´æÍ¼Ïñ
+        //// ä¿å­˜å›¾åƒ
         //imwrite("img_name", image);
-        
+    }
+    void YOLO8poseAfter(cv::Mat data_float)
+    {
+        cv::Mat frame = this->img_oringin;
+
+        //cv::Mat dout(outputH, outputW, CV_32F, (float*)outputData);
+        cv::Mat det_output = data_float.t(); // 8400x84
+        CheckMat(det_output,8400,56);
+        // post-process
+        std::vector<cv::Rect> boxes;
+        std::vector<int> classIds;
+        std::vector<float> confidences;
+
+        // fix bug, boxes consistence!
+        for (int i = 0; i < det_output.rows; i++) {
+            cv::Mat classes_scores = det_output.row(i).colRange(4, 84);
+            cv::Point classIdPoint;
+            double score;
+            minMaxLoc(classes_scores, 0, &score, 0, &classIdPoint);
+
+            // ç½®ä¿¡åº¦ 0ï½1ä¹‹é—´
+            if (score > 0.7)
+            {
+                float cx = det_output.at<float>(i, 0);
+                float cy = det_output.at<float>(i, 1);
+                float ow = det_output.at<float>(i, 2);
+                float oh = det_output.at<float>(i, 3);
+                int x = static_cast<int>((cx - 0.5 * ow - left) / scale);
+                int y = static_cast<int>((cy - 0.5 * oh - top) / scale2);
+
+                int width = static_cast<int>(ow / scale);
+                int height = static_cast<int>(oh / scale2);
+
+                cv::Rect box;
+                box.x = x;
+                box.y = y;
+                box.width = width;
+                box.height = height;
+
+                boxes.push_back(box);
+                classIds.push_back(classIdPoint.x);
+                confidences.push_back(score);
+            }
+        }
+        // NMS
+        std::vector<int> indexes;
+        cv::dnn::NMSBoxes(boxes, confidences, 0, 0, indexes);
+        if (indexes.size() < boxes.size())
+        {
+            for (size_t i = 0; i < indexes.size(); i++) {
+                int index = indexes[i];
+                int idx = classIds[index];
+                cv::rectangle(frame, boxes[index], cv::Scalar(0, 0, 255), 2, 8);
+                cv::rectangle(frame, cv::Point(boxes[index].tl().x, boxes[index].tl().y - 20),
+                    cv::Point(boxes[index].br().x, boxes[index].tl().y), cv::Scalar(0, 255, 255), -1);
+                putText(frame, labels[idx], cv::Point(boxes[index].tl().x, boxes[index].tl().y), cv::FONT_HERSHEY_PLAIN, 2.0, cv::Scalar(255, 0, 0), 2, 8);
+
+            }
+        }
+
+
+        this->img_result = frame;
+
     }
     void ResizeImage(Mat imgorigin, bool letterBoxImage)
     {
-        start = cv::getTickCount();
         this->img_oringin = imgorigin;
         int ih = imgorigin.rows;
         int iw = imgorigin.cols;
@@ -469,13 +515,13 @@ public:
         cv::Mat img;
         if (letterBoxImage)
         {
-            this->scale = min((double)w / iw, (double)h / ih);//Ëõ·Å±ÈÀı
-            this->scale2 = min((double)w / iw, (double)h / ih);//Ëõ·Å±ÈÀı
+            this->scale = min((double)w / iw, (double)h / ih);//ç¼©æ”¾æ¯”ä¾‹
+            this->scale2 = min((double)w / iw, (double)h / ih);//ç¼©æ”¾æ¯”ä¾‹
             int nw = static_cast<int>(iw * this->scale);
             int nh = static_cast<int>(ih * this->scale2);
 
             cv::resize(imgorigin, img, cv::Size(nw, nh), 0, 0, cv::INTER_LINEAR);
-            //Éú³É±³¾°
+            //ç”ŸæˆèƒŒæ™¯
             cv::Mat imgBack = cv::Mat::ones(h, w, CV_8UC3);
             cv::Scalar color(128, 128, 128);
             imgBack = color;
@@ -497,17 +543,15 @@ public:
             this->scale2 = (double)h / ih;
             cv::resize(imgorigin, img, cv::Size(inputW, inputH), 0, 0, cv::INTER_LINEAR);
             this->img = img;
-
         }
         inputData = new float[batchSize * inputC * inputH * inputW];
-        // ½«inputBlobµÄÊı¾İ¸´ÖÆµ½inputDataÖĞ
+        // å°†inputBlobçš„æ•°æ®å¤åˆ¶åˆ°inputDataä¸­
         for (int i = 0; i < inputH * inputW; i++) {
-            inputData[i] = this->img.at<cv::Vec3b>(i / inputW, i % inputW)[0] / 255.0;  // RÍ¨µÀ
-            inputData[i + inputH * inputW] = this->img.at<cv::Vec3b>(i / inputW, i % inputW)[1] / 255.0;  // GÍ¨µÀ
-            inputData[i + 2 * inputH * inputW] = this->img.at<cv::Vec3b>(i / inputW, i % inputW)[2] / 255.0;  // BÍ¨µÀ
+            inputData[i] = this->img.at<cv::Vec3b>(i / inputW, i % inputW)[0] / 255.0;  // Ré€šé“
+            inputData[i + inputH * inputW] = this->img.at<cv::Vec3b>(i / inputW, i % inputW)[1] / 255.0;  // Gé€šé“
+            inputData[i + 2 * inputH * inputW] = this->img.at<cv::Vec3b>(i / inputW, i % inputW)[2] / 255.0;  // Bé€šé“
         }
     }
-
 private:
 
 };
@@ -527,15 +571,13 @@ Engine::Engine(string name, string enginpath, int batchSize, int inputC, int inp
     this->enginpath = enginpath;
     if (name == "trt")
     {
-        //³õÊ¼»¯trt
+        //åˆå§‹åŒ–trt
         initLibNvInferPlugins(&gLogger, "");
         IRuntime* runtime = createInferRuntime(gLogger);
-        // ´ÓÎÄ¼şÖĞ·´ĞòÁĞ»¯Engine¶ÔÏó
+        // ä»æ–‡ä»¶ä¸­ååºåˆ—åŒ–Engineå¯¹è±¡
         std::ifstream engineFile(enginpath, std::ios::binary);
         if (!engineFile)
-        {
-            std::cerr << "ÎŞ·¨´ò¿ªEngineÎÄ¼ş½øĞĞ¶ÁÈ¡¡£" << std::endl;
-        }
+            std::cerr << "æ— æ³•æ‰“å¼€Engineæ–‡ä»¶è¿›è¡Œè¯»å–ã€‚" << std::endl;
         engineFile.seekg(0, std::ios::end);
         const size_t fileSize = engineFile.tellg();
         engineFile.seekg(0, std::ios::beg);
@@ -544,17 +586,19 @@ Engine::Engine(string name, string enginpath, int batchSize, int inputC, int inp
         engineFile.close();
         ICudaEngine* engine = runtime->deserializeCudaEngine(engineData.data(), engineData.size());
         if (!engine)
-        {
-            std::cerr << "ÎŞ·¨·´ĞòÁĞ»¯Engine¶ÔÏó¡£" << std::endl;
-        }
-        // ´´½¨TensorRTµÄÖ´ĞĞÉÏÏÂÎÄ¶ÔÏó
+            std::cerr << "æ— æ³•ååºåˆ—åŒ–Engineå¯¹è±¡ã€‚" << std::endl;
+        // åˆ›å»ºTensorRTçš„æ‰§è¡Œä¸Šä¸‹æ–‡å¯¹è±¡
         context = engine->createExecutionContext();
-        // ·ÖÅäGPUÄÚ´æ
-        cudaMalloc(&buffers[0], batchSize * inputC * inputH * inputW * sizeof(float));  // ·ÖÅäÊäÈëÄÚ´æ
-        //cudaMalloc(&buffers[1], batchSize * outputC * outputH * outputW * sizeof(float));  // ·ÖÅäÊä³öÄÚ´æ
-        cudaMalloc(&buffers[1], batchSize * outputC * outputH * outputW * sizeof(float));  // ·ÖÅäÊä³öÄÚ´æ
-        cudaMalloc(&buffers[2], batchSize * outputC * outputH * outputW * sizeof(float));  // ·ÖÅäÊä³öÄÚ´æ
+        //// åˆ›å»ºCUDAæµ
+        cudaStream_t stream;
 
+        cudaStreamCreate(&stream);
+
+        // åˆ†é…GPUå†…å­˜
+        cudaMalloc(&buffers[0], batchSize * inputC * inputH * inputW * sizeof(float));  // åˆ†é…è¾“å…¥å†…å­˜
+        //cudaMalloc(&buffers[1], batchSize * outputC * outputH * outputW * sizeof(float));  // åˆ†é…è¾“å‡ºå†…å­˜
+        cudaMalloc(&buffers[1], batchSize * outputC * outputH * outputW * sizeof(float));  // åˆ†é…è¾“å‡ºå†…å­˜
+        cudaMalloc(&buffers[2], batchSize * outputC * outputH * outputW * sizeof(float));  // åˆ†é…è¾“å‡ºå†…å­˜
     }
     else if (name == "onnx")
     {
@@ -564,4 +608,6 @@ Engine::Engine(string name, string enginpath, int batchSize, int inputC, int inp
 
 Engine::~Engine()
 {
+    delete inputData;
+    
 }
